@@ -8,145 +8,118 @@ public class TestSerialization {
     public static void main(String[] args) {
         System.out.println("Тестирование сериализации\n");
 
-        testSerializable();
-        testExternalizable();
-        compareFiles();
+        testSerializableVsExternalizable();
 
         System.out.println("\nТестирование завершено");
     }
 
-    private static void testSerializable() {
-        System.out.println("Тестирование Serializable:");
+    private static void testSerializableVsExternalizable() {
+        System.out.println("Создание и сериализация ln(exp(x)) на [0, 10] с 11 точками:");
 
         try {
             Exp exp = new Exp();
             Log log = new Log(Math.E);
             Function composition = Functions.composition(exp, log);
 
-            TabulatedFunction tabulated = TabulatedFunctions.tabulate(composition, 0, 10, 11);
+            FunctionPoint[] points = new FunctionPoint[11];
+            double step = 10.0 / 10;
 
-            System.out.println("Исходная функция (ln(exp(x))):");
-            for (int i = 0; i < tabulated.getPointsCount(); i++) {
-                FunctionPoint point = tabulated.getPoint(i);
-                System.out.printf("  (%.1f, %.1f)", point.getX(), point.getY());
-            }
-            System.out.println();
-
-            System.out.println("Сериализация");
-            try (ObjectOutputStream oos = new ObjectOutputStream(
-                    new FileOutputStream("serializable.dat"))) {  // ← ИМЯ ФАЙЛА ИСПРАВЛЕНО
-                oos.writeObject(tabulated);
+            System.out.println("Создаем точки функции ln(exp(x)) = x:");
+            for (int i = 0; i < 11; i++) {
+                double x = i * step;
+                double y = composition.getFunctionValue(x);
+                points[i] = new FunctionPoint(x, y);
+                System.out.printf("  Точка %2d: (%.1f, %.1f)%n", i, x, y);
             }
 
-            System.out.println("Десериализация");
-            TabulatedFunction deserialized;
-            try (ObjectInputStream ois = new ObjectInputStream(
-                    new FileInputStream("serializable.dat"))) {  // ← ИМЯ ФАЙЛА ИСПРАВЛЕНО
-                deserialized = (TabulatedFunction) ois.readObject();
-            }
+            System.out.println("\nСоздание ArrayTabulatedFunction:");
+            ArrayTabulatedFunction arrayFunc = new ArrayTabulatedFunction(points);
+            System.out.println("Array функция создана, точек: " + arrayFunc.getPointsCount());
 
-            System.out.println("Сравнение значений:");
-            boolean allMatch = true;
-            for (double x = 0; x <= 10; x += 1) {
-                double original = tabulated.getFunctionValue(x);
-                double deser = deserialized.getFunctionValue(x);
-                boolean matches = Math.abs(original - deser) < EPSILON;
-                allMatch &= matches;
-                System.out.printf("  x=%.1f: %.1f и %.1f - %s%n",
-                        x, original, deser, matches ? "Совпало" : "ERROR");
-            }
+            System.out.println("Создание LinkedListTabulatedFunction:");
+            LinkedListTabulatedFunction linkedListFunc = new LinkedListTabulatedFunction(points);
+            System.out.println("LinkedList функция создана, точек: " + linkedListFunc.getPointsCount());
 
-            System.out.println("Результат: " + (allMatch ? "Правильно" : "ОШИБКА"));
-            System.out.println("Размер файла: " + new File("serializable.dat").length() + " байт");
+            System.out.println("\nТест: ArrayTabulatedFunction");
+            testSerialization(arrayFunc, "array_serializable.dat");
+
+            System.out.println("\nТест: LinkedListTabulatedFunction");
+            testSerialization(linkedListFunc, "linkedlist_externalizable.dat");
+
+            compareFiles();
 
         } catch (Exception e) {
-            System.out.println("Ошибка: " + e.getMessage());
+            System.out.println("Ошибка при тестировании: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private static void testExternalizable() {
-        System.out.println("\nТестирование Externalizable:");
-
+    private static void testSerialization(TabulatedFunction function, String filename) {
         try {
-            Sin sin = new Sin();
-            TabulatedFunction tabulated = TabulatedFunctions.tabulate(sin, 0, Math.PI, 10);
+            String typeName = function.getClass().getSimpleName();
+            System.out.println(typeName + " - Сериализация в файл: " + filename);
 
-            System.out.println("Исходная функция sin(x):");
-            for (int i = 0; i < tabulated.getPointsCount(); i++) {
-                FunctionPoint point = tabulated.getPoint(i);
-                System.out.printf("  (%.2f, %.4f)", point.getX(), point.getY());
-            }
-            System.out.println();
-
-            System.out.println("Сериализация с Externalizable");
-            try (ObjectOutputStream oos = new ObjectOutputStream(
-                    new FileOutputStream("externalizable.dat"))) {  // ← ИМЯ ФАЙЛА ИСПРАВЛЕНО
-                oos.writeObject(tabulated);
+            try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
+                oos.writeObject(function);
             }
 
-            System.out.println("Десериализация");
+            System.out.println(typeName + " - Десериализация из файла: " + filename);
+
             TabulatedFunction deserialized;
-            try (ObjectInputStream ois = new ObjectInputStream(
-                    new FileInputStream("externalizable.dat"))) {  // ← ИМЯ ФАЙЛА ИСПРАВЛЕНО
+            try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filename))) {
                 deserialized = (TabulatedFunction) ois.readObject();
             }
 
-            System.out.println("Сравнение значений:");
+            System.out.println(typeName + " - Проверка корректности данных");
             boolean allMatch = true;
-            for (double x = 0; x <= Math.PI; x += 0.5) {
-                double original = tabulated.getFunctionValue(x);
-                double deser = deserialized.getFunctionValue(x);
-                boolean matches = Math.abs(original - deser) < EPSILON;
+            for (int i = 0; i < function.getPointsCount(); i++) {
+                FunctionPoint origPoint = function.getPoint(i);
+                FunctionPoint restPoint = deserialized.getPoint(i);
+
+                boolean matches = Math.abs(origPoint.getX() - restPoint.getX()) < EPSILON &&
+                        Math.abs(origPoint.getY() - restPoint.getY()) < EPSILON;
                 allMatch &= matches;
-                System.out.printf("  x=%.1f: %.4f и %.4f - %s%n",
-                        x, original, deser, matches ? "Совпало" : "ERROR");
+
+                if (!matches) {
+                    System.out.printf("  Ошибка в точке %d: (%.1f,%.1f) vs (%.1f,%.1f)%n",
+                            i, origPoint.getX(), origPoint.getY(), restPoint.getX(), restPoint.getY());
+                }
             }
 
-            System.out.println("Результат: " + (allMatch ? "Правильно" : "ОШИБКА"));
-            System.out.println("Размер файла: " + new File("externalizable.dat").length() + " байт");
+            File file = new File(filename);
+            System.out.println(typeName + " - Результат: " + (allMatch ? "Успешно" : "Ошибка"));
+            System.out.println(typeName + " - Размер файла: " + file.length() + " байт");
 
         } catch (Exception e) {
             System.out.println("Ошибка: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
     private static void compareFiles() {
-        System.out.println("\nСравнение файлов:");
+        System.out.println("\nСравнение размеров файлов");
 
-        File serFile = new File("serializable.dat");
-        File extFile = new File("externalizable.dat");
+        File arrayFile = new File("array_serializable.dat");
+        File linkedFile = new File("linkedlist_externalizable.dat");
 
-        if (serFile.exists() && extFile.exists()) {
-            System.out.println("Serializable: " + serFile.length() + " байт");
-            System.out.println("Externalizable: " + extFile.length() + " байт");
-            long difference = Math.abs(serFile.length() - extFile.length());
-            System.out.println("Разница: " + difference + " байт");
+        if (arrayFile.exists() && linkedFile.exists()) {
+            long arraySize = arrayFile.length();
+            long linkedSize = linkedFile.length();
 
-            if (serFile.length() < extFile.length()) {
-                System.out.println("Serializable создает меньшие файлы");
-            } else if (serFile.length() > extFile.length()) {
-                System.out.println("Externalizable создает меньшие файлы");
+            System.out.println("ArrayTabulatedFunction: " + arraySize + " байт");
+            System.out.println("LinkedListTabulatedFunction: " + linkedSize + " байт");
+
+            long difference = arraySize - linkedSize;
+            System.out.println("Разница: " + Math.abs(difference) + " байт");
+
+            if (difference > 0) {
+                System.out.println("Вывод: LinkedList (Externalizable) эффективнее на " + difference + " байт");
+            } else if (difference < 0) {
+                System.out.println("Вывод: Array (Serializable) эффективнее на " + Math.abs(difference) + " байт");
             } else {
-                System.out.println("Файлы одинакового размера");
+                System.out.println("Вывод: Оба метода одинаково эффективны");
             }
         } else {
-            System.out.println("Один или оба файла не созданы:");
-            System.out.println("serializable.dat существует: " + serFile.exists());
-            System.out.println("externalizable.dat существует: " + extFile.exists());
-        }
-
-        System.out.println("\nВсе файлы в директории:");
-        File currentDir = new File(".");
-        String[] files = currentDir.list();
-        if (files != null) {
-            for (String file : files) {
-                if (file.endsWith(".dat") || file.endsWith(".txt")) {
-                    File f = new File(file);
-                    System.out.println("  " + file + " - " + f.length() + " байт");
-                }
-            }
+            System.out.println("Файлы не найдены!");
         }
     }
 }

@@ -1,6 +1,6 @@
 package functions;
 import java.io.*;
-public class LinkedListTabulatedFunction implements TabulatedFunction, Serializable {
+public class LinkedListTabulatedFunction implements TabulatedFunction, Serializable, Externalizable {
     private static final long serialVersionUID = 1L;
     private class FunctionNode implements Serializable  {
         private static final long serialVersionUID = 1L;
@@ -69,6 +69,11 @@ public class LinkedListTabulatedFunction implements TabulatedFunction, Serializa
         for (FunctionPoint point : points) {
             addNodeToTail().point = new FunctionPoint(point);
         }
+    }
+    public LinkedListTabulatedFunction() {
+        initializeList();
+        addNodeToTail().point = new FunctionPoint(0, 0);
+        addNodeToTail().point = new FunctionPoint(1, 1);
     }
 
     private void initializeList() {
